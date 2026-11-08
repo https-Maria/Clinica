@@ -253,6 +253,29 @@ function renderReports(target,data){
   const counts={realizado:0,falta:0,cancelado:0,agendado:0};
   weekly.forEach(x=>{if(x.status in counts)counts[x.status]++;});
   const monthlyDischarges=data.patients.filter(p=>p.end_date&&p.end_date.slice(0,7)===now.toISOString().slice(0,7));
+  const weekRows=weekly.map(a=>({
+    horario:fmtDate(a.starts_at),paciente:assoc('patients',a.patient_id,data),
+    profissional:assoc('professionals',a.professional_id,data),
+    situacao:a.status,observacoes:a.notes||''
+  }));
+  const estimateByProfessional=new Map();
+  let unmatchedReceipts=0;
+  for(const receipt of data.receipts){
+    const invoice=data.receivables.find(c=>c.id===receipt.receivable_id);
+    const contract=data.contracts.find(c=>c.id===invoice?.contract_id);
+    const professional=data.professionals.find(p=>p.id===contract?.professional_id);
+    if(!contract||!professional){unmatchedReceipts++;continue;}
+    const pct=contract.share_pct??professional.default_share_pct??40;
+    const amount=Number(receipt.amount)*Number(pct)/100;
+    const old=estimateByProfessional.get(professional.id)||{profissional:professional.name,valor:0,recebimentos:0};
+    old.valor+=amount;old.recebimentos++;
+    estimateByProfessional.set(professional.id,old);
+  }
+  const estimateRows=[...estimateByProfessional.values()].map(x=>({
+    profissional:x.profissional,recebimentos:x.recebimentos,
+    estimativa:Math.round(x.valor*100)/100
+  }));
+  const estimatedTotal=estimateRows.reduce((s,x)=>s+x.estimativa,0);
   const activePatients=data.patients.filter(p=>p.active);
   const earned=data.receipts.reduce((s,x)=>s+Number(x.amount),0);
   const expenses=data.expenses.filter(x=>x.active&&x.paid_on).reduce((s,x)=>s+Number(x.amount),0);
@@ -270,9 +293,20 @@ function renderReports(target,data){
   const buttons=node('div','actions report-actions');
   buttons.append(button('Pacientes ativos · CSV',()=>csvExport('pacientes_ativos', ['name','phone','start_date','end_date'],activePatients)),
     button('Altas do mês · CSV',()=>csvExport('altas_mes',['name','end_date','phone'],monthlyDischarges)),
-    button('Atendimentos da semana · CSV',()=>csvExport('atendimentos_semana',['starts_at','patient_id','professional_id','status','notes'],weekly)),
+    button('Atendimentos da semana · CSV',()=>csvExport('atendimentos_semana',['horario','paciente','profissional','situacao','observacoes'],weekRows)),
+    button('Estimativa de repasses · CSV',()=>csvExport('estimativa_repasses',['profissional','recebimentos','estimativa'],estimateRows)),
     button('Imprimir / Salvar PDF',()=>window.print()));
   card.append(buttons);
-  const note=node('p','muted','Os repasses ainda dependem de validação da regra de liberação e não são calculados automaticamente. Relatórios financeiros exibem o total histórico registrado, não o saldo do mês.');
+  const forecast=node('section','estimate-block');
+  forecast.append(node('h3','','Estimativa de participação dos profissionais'),node('p','muted','Calculada apenas sobre recebimentos vinculados a contratos: regra do contrato, ou percentual do profissional, ou 40% padrão. Não é valor aprovado para pagamento.'));
+  const estimateTable=node('table');
+  const h=node('tr');['Profissional','Recebimentos','Estimativa'].forEach(x=>h.append(node('th','',x)));
+  estimateTable.append(h);
+  for(const row of estimateRows){
+    const tr=node('tr');tr.append(node('td','',row.profissional),node('td','',row.recebimentos),node('td','',fmtMoney(row.estimativa)));estimateTable.append(tr);
+  }
+  forecast.append(estimateTable,node('p','', 'Total estimado: '+fmtMoney(estimatedTotal)+'. Recebimentos sem contrato/profissional associados: '+unmatchedReceipts+'.'));
+  card.append(forecast);
+  const note=node('p','muted','A estimativa não substitui a conferência da presença, do contrato e da condição de liberação do repasse. Relatórios financeiros acima exibem totais históricos, não saldos mensais.');
   card.append(note);target.replaceChildren(card);
 }
