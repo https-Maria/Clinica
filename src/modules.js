@@ -1,6 +1,6 @@
 import './modules.css';
 import { divideRecebimento } from './finance.js';
-import { invoiceAction, recurringExpenseAction, reverseReceiptAction, weeklyDetails } from './operations.js';
+import { invoiceAction, recurringExpenseAction, reverseReceiptAction, weeklyDetails, monthlyFinanceDetails } from './operations.js';
 
 const definitions = {
   services: { title: 'Serviços', singular: 'serviço', fields: [
@@ -258,7 +258,7 @@ function renderReports(target,data){
   const weekly=data.appointments.filter(a=>a.active&&new Date(a.starts_at)>=weekStart&&new Date(a.starts_at)<weekEnd);
   const counts={realizado:0,falta:0,cancelado:0,agendado:0};
   weekly.forEach(x=>{if(x.status in counts)counts[x.status]++;});
-  const monthlyDischarges=data.patients.filter(p=>p.end_date&&p.end_date.slice(0,7)===now.toISOString().slice(0,7));
+  const monthlyDischarges=data.patients.filter(p=>p.end_reason==='alta'&&p.end_date&&p.end_date.slice(0,7)===now.toISOString().slice(0,7));
   const weekRows=weekly.map(a=>({
     horario:fmtDate(a.starts_at),paciente:assoc('patients',a.patient_id,data),
     profissional:assoc('professionals',a.professional_id,data),
@@ -316,5 +316,6 @@ function renderReports(target,data){
   const note=node('p','muted','A estimativa não substitui a conferência da presença, do contrato e da condição de liberação do repasse. Relatórios financeiros acima exibem totais históricos, não saldos mensais.');
   card.append(note);
   weeklyDetails(data,card);
+  monthlyFinanceDetails(data,card);
   target.replaceChildren(card);
 }
