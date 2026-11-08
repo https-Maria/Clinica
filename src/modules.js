@@ -149,7 +149,7 @@ function createField(item,initial,data) {
   if(item.step)input.step=item.step;
   if(item.type==='number'){input.min='0';if(item.k==='share_pct')input.max='100';}
   if(item.type==='datetime-local')input.value=localFromIso(initial?.[item.k]);
-  else input.value=initial?.[item.k]??({status:'agendado',method:'pix',billing_model:'mensalidade',term:'mensal',recurrence:'unica',reference_on:new Date().toISOString().slice(0,10),received_on:new Date().toISOString().slice(0,10)}[item.k]??'');
+  else input.value=initial?.[item.k]??(item.k==='status'&&item.choices?.includes('pendente')?'pendente':({status:'agendado',method:'pix',billing_model:'mensalidade',term:'mensal',recurrence:'unica',reference_on:new Date().toISOString().slice(0,10),received_on:new Date().toISOString().slice(0,10)}[item.k]??''));
   label.htmlFor='field_'+item.k;input.id='field_'+item.k;
   wrap.append(input);return wrap;
 }
