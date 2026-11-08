@@ -152,7 +152,7 @@ export function weeklyDetails(data,container) {
     problems.replaceChildren(asTable(['Paciente','Profissional','Dia','Situação','Observação'],missed));
     const fromDate=week.value;
     const toDate=[to.getFullYear(),String(to.getMonth()+1).padStart(2,'0'),String(to.getDate()).padStart(2,'0')].join('-');
-    const left=data.patients.filter(p=>p.end_date&&p.end_date>=fromDate&&p.end_date<toDate)
+    const left=data.patients.filter(p=>p.end_reason==='interrupcao'&&p.end_date&&p.end_date>=fromDate&&p.end_date<toDate)
       .map(p=>[p.name,new Date(p.end_date+'T12:00:00').toLocaleDateString('pt-BR'),p.notes||'—']);
     stopped.replaceChildren(asTable(['Paciente','Último dia registrado','Observação'],left));
   }
