@@ -1,6 +1,6 @@
 // Google Calendar via Google Identity Services (OAuth token popup).
-// Escopo somente leitura. Token somente em memória; nenhum segredo Google no Supabase.
-const GOOGLE_SCOPE='https://www.googleapis.com/auth/calendar.readonly';
+// Escopos de leitura e gestão de eventos. Token temporário em memória; nenhum segredo no banco.
+const GOOGLE_SCOPE='https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events';
 const GOOGLE_ENDPOINT='https://www.googleapis.com/calendar/v3';
 let accessToken=null;
 let tokenExpiresAt=0;
@@ -118,8 +118,8 @@ export async function renderGoogleCalendar(db,target,notify,role='staff'){
   catch(error){target.replaceChildren(h('p',error.message,'notice bad'));return;}
   target.replaceChildren();
   const root=h('section',undefined,'card');
-  root.append(h('h2','Google Agenda — importar compromissos'),
-    h('p','Conecte a conta que já possui acesso às agendas da clínica. O Google continua como fonte dos horários; o sistema importa apenas eventos selecionados, inicialmente como agendados, sem marcar presença ou gerar cobrança.','muted'));
+  root.append(h('h2','Google Agenda — agendar e gerenciar'),
+    h('p','Conecte a conta que possui acesso às agendas da clínica. Em agendas com permissão de edição, você poderá agendar, remarcar e desmarcar compromissos; presenças e cobranças continuam separadas.','muted'));
   const status=h('p',undefined,'notice');status.hidden=true;
   function feedback(message,isError=false){status.hidden=false;status.className=isError?'notice bad':'notice';status.textContent=message;notify(message,isError);}
   root.append(status);
@@ -187,7 +187,9 @@ export async function renderGoogleCalendar(db,target,notify,role='staff'){
     calendars.forEach(cal=>{
       const mapping=config.links.find(l=>l.google_calendar_id===cal.id&&l.active);
       const row=h('div',undefined,'google-calendar-row');
+      const canEdit=['owner','writer'].includes(cal.accessRole);
       row.append(h('strong',cal.summary||cal.id),h('span',cal.id,'google-id'));
+      row.append(h('span',canEdit?'Permissão: editar eventos':'Permissão: somente leitura','muted'));
       const prof=select(config.professionals.map(p=>[p.id,p.name]),'Escolha o profissional');
       const service=select(config.services.map(s=>[s.id,s.name]),'Serviço opcional');
       prof.value=mapping?.professional_id||'';
@@ -213,6 +215,12 @@ export async function renderGoogleCalendar(db,target,notify,role='staff'){
         if(!selected){feedback('Vincule esta agenda a um profissional antes de importar eventos.',true);return;}
         void showEvents(cal,selected);
       }));
+      if(canEdit)row.append(button('+ Agendar no Google',()=>{
+        const selected=config.links.find(x=>x.google_calendar_id===cal.id&&x.active);
+        if(!selected){feedback('Associe esta agenda a um profissional antes de criar compromissos.',true);return;}
+        openGoogleEditor({mode:'create',db,cal,mapping:selected,notify:feedback,
+          reload:()=>showEvents(cal,selected)});
+      },''));
       list.append(row);
     });
     calendarArea.append(list);
@@ -256,7 +264,7 @@ export async function renderGoogleCalendar(db,target,notify,role='staff'){
           'muted'));
         if(!events.length)return;
         const tableWrap=h('div',undefined,'table-wrap'),table=h('table');
-        const header=h('tr');['Importar','Data e horário','Título no Google','Paciente no sistema','Situação'].forEach(x=>header.append(h('th',x)));
+        const header=h('tr');['Importar','Data e horário','Título no Google','Paciente no sistema','Situação','Google Agenda'].forEach(x=>header.append(h('th',x)));
         const thead=h('thead');thead.append(header);table.append(thead);
         const body=h('tbody');const selections=[];
         events.forEach(event=>{
@@ -272,6 +280,15 @@ export async function renderGoogleCalendar(db,target,notify,role='staff'){
           const patientCell=h('td');patientCell.append(patient);
           const state=h('td',already?'Já importado':'Novo');
           row.append(mark,h('td',localTime(event.start.dateTime)),h('td',event.summary||'(sem título)'),patientCell,state);
+          const actionCell=h('td',undefined,'actions');
+          if(['owner','writer'].includes(cal.accessRole)&&!event.recurringEventId){
+            actionCell.append(button('Remarcar',()=>openGoogleEditor({mode:'edit',db,cal,mapping,event,notify:feedback,
+              reload:loadEvents}),'secondary small'));
+            actionCell.append(button('Desmarcar',()=>cancelGoogleEvent({db,cal,event,notify:feedback,reload:loadEvents}),'secondary small'));
+          }else if(event.recurringEventId){
+            actionCell.append(h('span','Evento recorrente: altere no Google por enquanto.','muted'));
+          }
+          row.append(actionCell);
           body.append(row);
           selections.push({event,check,patient,already});
         });
@@ -305,4 +322,160 @@ export async function renderGoogleCalendar(db,target,notify,role='staff'){
       }
     }
   }
+}
+
+
+function toLocalInput(value){
+  if(!value)return '';
+  const d=new Date(value);
+  return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+}
+async function googleWrite(method,path,payload,etag){
+  if(!accessToken||Date.now()>tokenExpiresAt){
+    throw Error('Autorização Google expirada. Conecte novamente para editar a agenda.');
+  }
+  const headers={'Authorization':'Bearer '+accessToken};
+  if(payload)headers['Content-Type']='application/json';
+  if(etag)headers['If-Match']=etag;
+  const response=await fetch(GOOGLE_ENDPOINT+path,{
+    method,headers,cache:'no-store',
+    ...(payload?{body:JSON.stringify(payload)}:{})
+  });
+  if(!response.ok){
+    if(response.status===412)throw Error('O evento foi modificado por outra pessoa. Recarregue antes de alterar.');
+    if(response.status===403)throw Error('Esta conta não possui permissão de edição para a agenda.');
+    if(response.status===401)throw Error('A autorização Google expirou. Conecte novamente.');
+    if(response.status===404||response.status===410)throw Error('O evento não existe mais no Google. Atualize os eventos.');
+    throw Error('O Google recusou a alteração (HTTP '+response.status+').');
+  }
+  return response.status===204?null:response.json();
+}
+async function linkedAppointment(db,calId,eventId){
+  const {data,error}=await db.from('appointments')
+    .select('id,status,active,contract_id,patient_id').eq('google_calendar_id',calId)
+    .eq('google_event_id',eventId).maybeSingle();
+  if(error)throw Error('Não foi possível verificar o histórico da consulta no sistema.');
+  if(!data)return null;
+  const {data:charges,error:chargeError}=await db.from('receivables')
+    .select('id').eq('origin_key','session:'+data.id).limit(1);
+  if(chargeError)throw Error('Não foi possível conferir o vínculo financeiro do atendimento.');
+  if(charges?.length||data.status!=='agendado'||!data.active){
+    throw Error('Este evento já tem histórico de presença/cobrança ou está inativo. Corrija pelo sistema com conferência administrativa; o Google não será alterado.');
+  }
+  return data;
+}
+function googleEventPath(calendar,eventId){
+  return '/calendars/'+encodeURIComponent(calendar)+'/events'+(eventId?'/'+encodeURIComponent(eventId):'');
+}
+async function freshEvent(cal,event){
+  const current=await api(googleEventPath(cal.id,event.id));
+  if(event.etag&&current.etag&&event.etag!==current.etag){
+    throw Error('O horário ou título mudou no Google desde a consulta. Busque os eventos novamente.');
+  }
+  return current;
+}
+function openGoogleEditor({mode,db,cal,mapping,event,notify,reload}){
+  if(!['owner','writer'].includes(cal.accessRole)){
+    notify('Agenda disponível somente para leitura.',true);return;
+  }
+  const overlay=h('div',undefined,'overlay');
+  const modal=h('section',undefined,'modal small-dialog');
+  modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');
+  modal.append(h('h2',mode==='create'?'Agendar no Google':'Remarcar no Google'));
+  modal.append(h('p','Agenda: '+(cal.summary||cal.id),'muted'));
+  const form=h('form');
+  const title=h('input',undefined,'input');title.type='text';title.required=true;title.maxLength=255;
+  title.value=event?.summary||'';
+  const starts=h('input',undefined,'input');starts.type='datetime-local';starts.required=true;
+  const ends=h('input',undefined,'input');ends.type='datetime-local';ends.required=true;
+  const tomorrow=new Date(Date.now()+86400000);
+  tomorrow.setHours(9,0,0,0);
+  starts.value=toLocalInput(event?.start?.dateTime||tomorrow.toISOString());
+  ends.value=toLocalInput(event?.end?.dateTime||new Date(tomorrow.getTime()+3600000).toISOString());
+  form.append(label('Nome do compromisso',title),label('Início',starts),label('Fim',ends));
+  let patient;
+  if(mode==='create'){
+    const holder=h('div');
+    holder.append(h('p','Carregando pacientes disponíveis…','muted'));
+    form.append(holder);
+    void db.from('patients').select('id,name').is('deleted_at',null).eq('active',true)
+      .order('name').limit(1000).then(({data,error})=>{
+        if(!holder.isConnected)return;
+        if(error){holder.replaceChildren(h('p','Não foi possível carregar pacientes; o evento poderá ficar sem vínculo.','muted'));return;}
+        patient=select((data||[]).map(x=>[x.id,x.name]),'Paciente opcional');
+        patient.addEventListener('change',()=>{
+          const name=(data||[]).find(x=>x.id===patient.value)?.name;
+          if(name&&!title.value.trim())title.value=name;
+        });
+        holder.replaceChildren(label('Paciente no sistema (opcional)',patient));
+      });
+  }
+  const actions=h('div',undefined,'actions modal-actions');
+  const cancel=button('Voltar',()=>overlay.remove());
+  const save=h('button',mode==='create'?'Criar compromisso':'Salvar remarcação','btn');
+  save.type='submit';
+  actions.append(cancel,save);form.append(actions);
+  form.addEventListener('submit',async e=>{
+    e.preventDefault();
+    const start=new Date(starts.value),end=new Date(ends.value);
+    if(!title.value.trim()||!Number.isFinite(start.getTime())||!Number.isFinite(end.getTime())||end<=start){
+      notify('Preencha o título e um período válido com término depois do início.',true);return;
+    }
+    if(!confirm((mode==='create'?'Criar compromisso':'Remarcar compromisso')+' diretamente na agenda '+(cal.summary||cal.id)+'?'))return;
+    save.disabled=true;
+    try{
+      const payload={summary:title.value.trim(),start:{dateTime:start.toISOString()},end:{dateTime:end.toISOString()}};
+      let created,linked=null;
+      if(mode==='edit'){
+        linked=await linkedAppointment(db,cal.id,event.id);
+        const current=await freshEvent(cal,event);
+        created=await googleWrite('PATCH',googleEventPath(cal.id,event.id),payload,current.etag);
+        if(linked){
+          const {error}=await db.from('appointments')
+            .update({starts_at:start.toISOString(),ends_at:end.toISOString(),
+              google_title:title.value.trim(),google_last_seen_at:new Date().toISOString()})
+            .eq('id',linked.id);
+          if(error)throw Error('A remarcação foi salva no Google, mas o sistema local não foi atualizado: '+error.message+'. Reabra o evento para conciliar.');
+        }
+      }else{
+        created=await googleWrite('POST',googleEventPath(cal.id),payload);
+        if(!created?.id)throw Error('Google não devolveu um identificador do novo evento.');
+        const {error}=await db.from('appointments').insert({
+          google_calendar_id:cal.id,google_event_id:created.id,
+          google_title:title.value.trim(),google_last_seen_at:new Date().toISOString(),
+          professional_id:mapping.professional_id,service_id:mapping.service_id,
+          patient_id:patient?.value||null,
+          starts_at:start.toISOString(),ends_at:end.toISOString(),
+          source:'google',status:'agendado',active:true
+        });
+        if(error)throw Error('O compromisso foi criado no Google, mas não pôde ser registrado no sistema: '+error.message+'. Confira o Google antes de tentar novamente.');
+      }
+      overlay.remove();notify(mode==='create'?'Compromisso criado no Google e no sistema.':'Compromisso remarcado no Google.');await reload();
+    }catch(error){notify(error.message,true);}
+    finally{save.disabled=false;}
+  });
+  modal.append(form);overlay.append(modal);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+  document.body.append(overlay);title.focus();
+}
+async function cancelGoogleEvent({db,cal,event,notify,reload}){
+  if(!['owner','writer'].includes(cal.accessRole)){
+    notify('Esta agenda está em modo somente leitura.',true);return;
+  }
+  if(!confirm('Desmarcar "'+(event.summary||'compromisso')+'" em '+(cal.summary||cal.id)+'? O evento será excluído do Google Agenda. A operação não cancela cobranças nem pagamentos.')){
+    return;
+  }
+  try{
+    const linked=await linkedAppointment(db,cal.id,event.id);
+    const current=await freshEvent(cal,event);
+    await googleWrite('DELETE',googleEventPath(cal.id,event.id),null,current.etag);
+    if(linked){
+      const {error}=await db.from('appointments')
+        .update({status:'cancelado',google_last_seen_at:new Date().toISOString()})
+        .eq('id',linked.id);
+      if(error)throw Error('Evento cancelado no Google, mas o registro local exige conciliação manual: '+error.message);
+    }
+    notify('Compromisso desmarcado no Google. O histórico financeiro não foi apagado.');
+    await reload();
+  }catch(error){notify(error.message,true);}
 }
