@@ -65,6 +65,16 @@ function loginScreen() {
     if(error) message('Não foi possível entrar. Verifique o e-mail e a senha.',true);
   });
   card.append(element('h1',{},'Clínica AnaCris'),element('p',{class:'muted'},'Acesso administrativo'),form);
+  const legal=element('p',{class:'muted legal-links'});
+  for(const [caption,url] of [
+    ['Sobre o aplicativo','./sobre.html'],
+    ['Política de Privacidade','./privacidade.html'],
+    ['Termos de Serviço','./termos.html']
+  ]) {
+    if(legal.childNodes.length)legal.append(document.createTextNode(' · '));
+    const link=element('a',{href:url},caption);legal.append(link);
+  }
+  card.append(legal);
   app.append(card);
 }
 function noAccess() {
