@@ -1,11 +1,18 @@
 import './modules.css';
 import { divideRecebimento } from './finance.js';
+import { renderReminders } from './reminders.js';
 import { invoiceAction, recurringExpenseAction, reverseReceiptAction, weeklyDetails, monthlyFinanceDetails, auditDetails } from './operations.js';
 
 const definitions = {
   services: { title: 'Serviços', singular: 'serviço', fields: [
-    { k:'name', l:'Nome do serviço', required:true },
-  ], cols: ['name'] },
+    {k:'name',l:'Nome do serviço',required:true},
+    {k:'specialty',l:'Área',choices:['Fisioterapia','Pilates','Nutrição','Outro'],required:true},
+    {k:'description',l:'Descrição do atendimento',type:'textarea'},
+    {k:'duration_minutes',l:'Duração padrão (minutos)',type:'number',step:'1'},
+    {k:'delivery_mode',l:'Modalidade',choices:['clinica','domicilio','online','misto'],required:true},
+    {k:'reference_price',l:'Preço de referência (R$)',type:'number',step:'0.01'},
+    {k:'notes',l:'Observações administrativas',type:'textarea'}
+  ], cols:['name','specialty','duration_minutes','delivery_mode','reference_price'] },
   contracts: { title:'Contratos', singular:'contrato', fields: [
     {k:'patient_id',l:'Paciente',ref:'patients',required:true},
     {k:'professional_id',l:'Profissional',ref:'professionals',required:true},
@@ -47,7 +54,8 @@ const definitions = {
   ], cols:['received_on','receivable_id','amount','method','receipt_state'] },
   expenses: { title:'Despesas', singular:'despesa', fields: [
     {k:'description',l:'Descrição',required:true},
-    {k:'category',l:'Categoria'},
+    {k:'expense_type',l:'Tipo de despesa',choices:['fixa','variavel','sazonal'],required:true},
+    {k:'category',l:'Categoria (ex.: aluguel, energia, manutenção)'},
     {k:'amount',l:'Valor (R$)',type:'number',step:'0.01',required:true},
     {k:'due_on',l:'Vencimento',type:'date',required:true},
     {k:'paid_on',l:'Data do pagamento',type:'date'},
@@ -67,7 +75,7 @@ export const moduleItems = [
   ['services','Serviços'],['contracts','Contratos'],
   ['appointments','Agenda / sessões'],['receivables','A receber'],
   ['receipts','Recebimentos'],['expenses','Despesas'],
-  ['payouts','Repasses'],['relatorios','Relatórios'],['auditoria','Auditoria']
+  ['payouts','Repasses'],['lembretes','Meus lembretes'],['relatorios','Relatórios'],['auditoria','Auditoria']
 ];
 const tables = ['patients','professionals','services','contracts','appointments','receivables','receipts','receipt_reversals','expenses','payouts'];
 function node(tag,klass='',value) {
@@ -149,9 +157,9 @@ function createField(item,initial,data) {
   input.name=item.k;
   if(item.required)input.required=true;
   if(item.step)input.step=item.step;
-  if(item.type==='number'){input.min='0';if(item.k==='share_pct')input.max='100';}
+  if(item.type==='number'){input.min='0';if(item.k==='share_pct')input.max='100';if(item.k==='duration_minutes')input.max='480';}
   if(item.type==='datetime-local')input.value=localFromIso(initial?.[item.k]);
-  else input.value=initial?.[item.k]??(item.k==='status'&&item.choices?.includes('pendente')?'pendente':({status:'agendado',method:'pix',billing_model:'mensalidade',term:'mensal',recurrence:'unica',reference_on:new Date().toISOString().slice(0,10),received_on:new Date().toISOString().slice(0,10)}[item.k]??''));
+  else input.value=initial?.[item.k]??(item.k==='status'&&item.choices?.includes('pendente')?'pendente':({status:'agendado',method:'pix',billing_model:'mensalidade',term:'mensal',recurrence:'unica',expense_type:'variavel',specialty:'Fisioterapia',delivery_mode:'clinica',reference_on:new Date().toISOString().slice(0,10),received_on:new Date().toISOString().slice(0,10)}[item.k]??''));
   label.htmlFor='field_'+item.k;input.id='field_'+item.k;
   wrap.append(input);return wrap;
 }
@@ -162,6 +170,24 @@ function openForm(db,config,existing,data,reload,notify) {
   const form=node('form');
   const grid=node('div','fields');
   config.fields.forEach(f=>grid.append(createField(f,existing,data)));
+  if(config===definitions.contracts){
+    const term=grid.querySelector('[name="term"]');
+    const end=grid.querySelector('[name="ends_on"]');
+    const start=grid.querySelector('[name="starts_on"]');
+    const endGroup=end?.parentElement;
+    const hint=node('p','muted custom-term-help','Personalizado: preencha início e fim. Nas demais vigências, a data final é opcional e fica oculta.');
+    if(endGroup)endGroup.append(hint);
+    const update=()=>{
+      const personal=term?.value==='personalizado';
+      if(endGroup)endGroup.hidden=!personal;
+      if(end)end.required=personal;
+      if(start)start.required=true;
+      if(personal&&end&&start&&start.value)end.min=start.value;
+    };
+    term?.addEventListener('change',update);
+    start?.addEventListener('change',update);
+    update();
+  }
   const actions=node('div','actions modal-actions');
   const save=node('button','btn','Salvar');save.type='submit';
   actions.append(button('Cancelar',()=>overlay.remove()),save);
@@ -193,6 +219,7 @@ function openForm(db,config,existing,data,reload,notify) {
   document.body.append(overlay);modal.querySelector('input,select')?.focus();
 }
 export async function renderModule(db,page,target,notify,role='staff') {
+  if(page==='lembretes'){await renderReminders(db,target,notify);return;}
   if(page==='auditoria'){
     if(role!=='admin'){target.replaceChildren(node('p','notice bad','Acesso restrito a administradores.'));return;}
     await auditDetails(db,target);return;
@@ -216,7 +243,8 @@ export async function renderModule(db,page,target,notify,role='staff') {
   if(page!=='payouts'||role==='admin')controls.append(button('+ Novo '+config.singular,()=>openForm(db,config,null,data,()=>renderModule(db,page,target,notify,role),notify),''));
   tools.append(search,controls);
   const caption=node('p','muted module-caption',
-    page==='appointments'?'Agenda interna. Integração automática com Google Agenda ainda não conectada.':
+    page==='services'?'Serviço descreve o atendimento que a clínica oferece (ex.: Pilates de 50 minutos). Contrato define preço e condições de um paciente específico.':
+    page==='appointments'?'Agenda interna. Sessões realizadas de contratos por sessão geram cobrança automática; Google Agenda ainda não conectado.':
     page==='payouts'?'Os repasses são registrados manualmente; sugestões de cálculo não significam dívida aprovada.':
     page==='receipts'?'Recebimentos são registros financeiros imutáveis. Correções exigem estorno controlado.':
     'Consulte, cadastre, edite e inative os registros quando aplicável.');
