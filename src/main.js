@@ -79,7 +79,7 @@ function shell() {
   const heading=element('div',{class:'brand'});
   heading.append(element('strong',{},'Clínica AnaCris'),element('small',{},'Gestão administrativa'));
   const menu=element('nav',{class:'menu'});
-  for(const [key,label] of [['inicio','Início'],['patients','Pacientes'],['professionals','Profissionais'],...moduleItems]) {
+  for(const [key,label] of [['inicio','Início'],['patients','Pacientes'],['professionals','Profissionais'],...moduleItems.filter(([key])=>key!=='auditoria'||state.role==='admin')]) {
     menu.append(btn(label,()=>{state.page=key;render();},'navbtn'));
   }
   sidebar.append(heading,menu);
