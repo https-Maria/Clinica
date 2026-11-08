@@ -99,3 +99,10 @@ A integração com **Google Agenda** ainda exige OAuth/autorização dos calend�
 Foi adicionado o módulo **Google Agenda** com fluxo OAuth de leitura, mapeamento de calendários por profissional e importação de eventos selecionados. A configuração do Client ID e a autorização da conta Google são obrigatórias antes de usar. **Ainda não é uma sincronização automática ou bidirecional.**
 
 [Passo a passo do OAuth no Google Cloud e funcionamento da integração](docs/07-integracao-google-agenda.md).
+
+
+## Agendamento diretamente no Google (versão atual do código)
+
+O módulo **Google Agenda** também inclui botões **+ Agendar no Google**, **Remarcar** e **Desmarcar** para agendas com permissão de edição (writer/owner). O código usa os escopos OAuth `calendar.readonly` e `calendar.events` e solicita confirmação antes de modificar os compromissos. Alterações financeiras permanecem protegidas no Supabase.
+
+**Ainda não está ativado:** exige um Client ID OAuth Web configurado no Google Cloud e autorização da conta Google responsável pelas agendas. Ainda precisa de testes reais na agenda da clínica; não existe sincronização contínua em segundo plano. [Passo a passo da integração](docs/07-integracao-google-agenda.md).
