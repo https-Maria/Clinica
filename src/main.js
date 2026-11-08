@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import './style.css';
 import { renderModule, moduleItems } from './modules.js';
 import { maskPhone, maskPix, normalizePix, isValidPix } from './formatters.js';
+import { dashboardPendencies } from './dashboard.js';
 
 const app = document.querySelector('#app');
 const apiUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -129,6 +130,9 @@ function render() {
       element('p',{},'Use o menu para gerenciar pacientes, profissionais, serviços, contratos, atendimentos e financeiro. Os dados ficam no Supabase.'),
       element('p',{class:'muted'},'A sincronização automática com o Google Agenda ainda depende de configuração e autorização.'));
     view.append(cards,note);
+    void dashboardPendencies(supabase,view,()=>{
+      state.page='lembretes';render();
+    });
   } else if(state.page==='patients'||state.page==='professionals') {
     renderTable(view);
   } else {
