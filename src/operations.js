@@ -77,10 +77,9 @@ export function recurringExpenseAction(db,expense,reload,notify){
   const {overlay,box}=createDialog('Gerar próxima despesa','Gera o próximo lançamento sem alterar ou pagar automaticamente a despesa anterior.');
   const form=$('form');
   const month=field('Competência de destino','month',true);
-  const original=new Date(expense.due_on+'T12:00:00');
-  const next=new Date(original);
-  next.setMonth(original.getMonth()+(expense.recurrence==='anual'?12:1));
-  month.input.value=next.toISOString().slice(0,7);
+  const [year,monthNumber]=expense.due_on.split('-').map(Number);
+  const next=new Date(year,monthNumber-1+(expense.recurrence==='anual'?12:1),1,12);
+  month.input.value=[next.getFullYear(),String(next.getMonth()+1).padStart(2,'0')].join('-');
   form.append(month.wrap);
   const save=actions(form,overlay);
   form.addEventListener('submit',async e=>{
