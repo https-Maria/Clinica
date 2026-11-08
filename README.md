@@ -1,68 +1,87 @@
 # Clínica AnaCris — Gestão administrativa
 
-MVP básico, modular e confiável para administração clínica. **Status: estrutura inicial / não liberado para dados reais antes da validação.**
+Projeto simples de gestão administrativa e financeira para clínica, em desenvolvimento.
 
-## Escopo da primeira versão
+**Status:** código de módulos enviado; banco criado; publicação, primeiro usuário e testes de ponta a ponta pendentes. **Não inserir dados reais de pacientes ainda.**
 
-- Login por e-mail/senha via Supabase Auth (usuários criados pelo administrador)
-- Cadastro e edição de pacientes e profissionais
-- Inativação e reativação, preservando histórico (sem exclusão física)
-- Busca por nome e exportação CSV compatível com Excel
-- Painel simples com quantidades cadastradas
-- Layout responsivo
+## Acessos
 
-**Ainda não implementados:** Google Agenda, atendimento, presença, contratos, contas, repasses e relatórios semanais. Documentados em `docs/`.
+- [Repositório GitHub](https://github.com/https-Maria/Clinica)
+- [Projeto Supabase](https://supabase.com/dashboard/project/iuchcggvcbtakeeyujwb)
+- [Endereço previsto do GitHub Pages](https://https-maria.github.io/Clinica/) — dependente do deploy bem-sucedido.
 
-## Arquitetura
+## Tecnologia
 
-- Frontend: Vite + JavaScript + CSS, hospedado no GitHub Pages.
-- Backend: Supabase PostgreSQL + Auth + Row Level Security.
-- Banco como fonte oficial dos registros; a agenda do Google será integração futura.
-- O código no Pages é público para os visitantes, mas nenhuma tabela deve aceitar acesso público.
+- Vite + JavaScript + CSS (sem framework pesado)
+- PostgreSQL / Supabase Auth / RLS
+- GitHub Actions para compilar e publicar no GitHub Pages
+- Módulos separados em `src/main.js`, `src/modules.js` e `src/finance.js`
 
-## Executar localmente
+## Recursos implementados no código
 
-1. `npm install`
-2. Copie `.env.example` para `.env` (o arquivo `.env` não deve ser enviado ao Git).
-3. Configure `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` com os valores do projeto Supabase **clinica-anacris**.
-4. Execute `npm run dev`.
-5. Abra o endereço exibido pelo Vite.
+| Área | Funções disponíveis | Limite atual |
+|---|---|---|
+| Login | E-mail e senha pelo Supabase Auth; só usuário autorizado | Não há usuários cadastrados |
+| Pacientes | Criar, consultar, buscar, editar, inativar/reativar, CSV | Teste real pendente |
+| Profissionais | CRUD lógico, especialidade, conselho, chave PIX, percentual | Teste real pendente |
+| Serviços | Cadastro e exportação CSV | Teste real pendente |
+| Contratos | Modalidade de cobrança, vigência, valor, paciente, profissional, exceção no repasse | Não gera cobranças sozinho |
+| Agenda interna | Agendamentos, presença, falta, cancelamento | Sem sincronização automática com Google |
+| Contas a receber | Criar cobrança, vencimento e situação calculada | Não gera parcelas automaticamente |
+| Recebimentos | Pagamentos parciais; trava de excesso no banco | Estorno ainda não implementado |
+| Despesas | Cadastrar valores fixos/variáveis, vencimento e pagamento | Recorrência registrada, sem geração automática |
+| Repasses | Lançamento manual pendente/pago; histórico protegido | **Não** é liquidação automática |
+| Relatórios | Pacientes ativos, altas, atendimentos semanais, CSV, impressão/PDF e estimativa de participação | Sem XLSX nativo e sem relatório semanal completo |
 
-**Nunca colocar service_role, secret key, senhas, planilhas reais ou tokens OAuth em `.env` do frontend/repositório.** A chave `publishable` é pública, portanto a segurança depende das políticas RLS.
+**Importante:** o percentual padrão é 60% clínica / 40% profissional, com exceção por contrato ou profissional. A estimativa não deve ser interpretada como valor aprovado para repasse.
 
-## Banco de dados — aplicado em 08/11/2026
+## Primeiro login (ainda pendente)
 
-As tabelas `clinic_members`, `patients` e `professionals`, índices e suas políticas RLS foram criadas no projeto `clinica-anacris` (`iuchcggvcbtakeeyujwb`). **Não execute novamente o SQL da migração no mesmo projeto.**
+1. No [Supabase → Authentication → Users](https://supabase.com/dashboard/project/iuchcggvcbtakeeyujwb/auth/users), crie/invite um usuário com **e-mail real** e defina a senha de forma privada, no próprio Supabase. Não poste sua senha em chats nem a inclua no Git.
+2. Copie o UUID desse usuário. No Supabase SQL Editor execute:
+   ```sql
+   insert into public.clinic_members (user_id, role, active)
+   values ('UUID_DO_USUARIO', 'admin', true)
+   on conflict (user_id) do update set role='admin',active=true;
+   ```
+3. Faça login no sistema e confirme que um usuário **não autorizado** continua sem acesso aos registros.
+4. Configure a URL de redirecionamento do Auth de acordo com o endereço publicado.
 
-O primeiro usuário autorizado ainda precisa ser provisionado:
+Não temos ação segura de criação de usuários Supabase Auth disponível na conexão atual; o usuário inicial precisa ser criado pelo Dashboard.
 
-1. Supabase > Authentication > Users: crie o primeiro usuário (não habilitar cadastro público).
-2. Copie o UUID do usuário criado e execute no SQL Editor:
-   `insert into public.clinic_members(user_id, role) values ('UUID_DO_USUARIO', 'admin');`
-3. Verifique com um usuário autorizado e outro não autorizado que só o primeiro acessa os registros.
-4. Confirme políticas RLS, backup e recuperação antes de inserir pacientes reais.
+## GitHub Pages
 
-## Publicar no GitHub Pages
+1. Vá a [Settings → Pages](https://github.com/https-Maria/Clinica/settings/pages).
+2. Selecione **Build and deployment → Source: GitHub Actions**.
+3. Confira a execução em [Actions](https://github.com/https-Maria/Clinica/actions). O workflow executa checagem de sintaxe, testes de cálculo e build.
+4. A base do Vite está configurada como `/Clinica/`.
+5. Se o navegador continuar em branco, abra DevTools → Console/Network e verifique o erro da execução do workflow.
 
-O fluxo inicial usa `npm install` no GitHub Actions; antes da primeira versão de produção, gerar e versionar `package-lock.json` e voltar ao `npm ci`. A compilação não pôde ser validada neste ambiente por indisponibilidade de acesso ao registro npm.
+## Execução local
 
-1. Crie um repositório chamado `clinica-anacris` no GitHub (preferencialmente privado enquanto desenvolve).
-2. Envie os arquivos deste projeto para a branch `main`.
-3. GitHub > Settings > Pages > Source: **GitHub Actions**.
-4. GitHub > Settings > Secrets and variables > Actions > Variables: adicione `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY`.
-5. Em Actions, confira o workflow `Publicar GitHub Pages`.
-6. Em Supabase > Authentication > URL Configuration, configure a URL de publicação autorizada.
+```bash
+npm install
+npm run check
+npm test
+npm run dev
+```
 
-**Atenção:** GitHub Pages tem restrições por plano/visibilidade; confira se Pages está disponível para o tipo do seu repositório. Não publique planilhas com dados de pacientes.
+Crie `.env` com os valores de `.env.example`. **Somente a publishable key** pode ficar no frontend — nunca coloque `service_role`, secret key, senha ou token OAuth no código.
+
+## Segurança e dados
+
+As 10 tabelas estão com RLS; o Supabase não apontou alertas de segurança na última verificação. Isso não substitui testes com contas reais, monitoramento e plano de backup/restauração. Recebimentos ficam imutáveis; a rotina segura de estorno ainda precisa ser implementada antes do uso financeiro real.
+
+Os arquivos das planilhas originais não devem ser publicados no repositório público.
 
 ## Documentos
 
-- [`docs/01-requisitos.md`](docs/01-requisitos.md) — requisitos e recorte do MVP
-- [`docs/02-regras-de-negocio.md`](docs/02-regras-de-negocio.md) — regras operacionais e financeiras
-- [`docs/03-modelo-de-dados.md`](docs/03-modelo-de-dados.md) — entidades e próximos módulos
-- [`docs/04-implantacao-e-testes.md`](docs/04-implantacao-e-testes.md) — validações e aceite
-- [`docs/05-fontes-e-importacao.md`](docs/05-fontes-e-importacao.md) — mapeamento dos controles existentes
+- [Requisitos](docs/01-requisitos.md)
+- [Regras de negócio](docs/02-regras-de-negocio.md)
+- [Modelo de dados](docs/03-modelo-de-dados.md)
+- [Implantação e testes](docs/04-implantacao-e-testes.md)
+- [Fontes e importação](docs/05-fontes-e-importacao.md)
 
-## Privacidade
+## Próximos passos
 
-Dados clínicos e de identificação são sensíveis. Restringir usuários, não publicar planilhas reais no Git, aplicar minimização e auditar acessos. Esta versão não é prontuário eletrônico.
+Validar deploy, login e CRUD; implementar estornos auditados e testes end-to-end; conectar Google Agenda via autorização adequada; automatizar contas recorrentes; criar exportações XLSX/PDF aprimoradas e relatórios completos.
