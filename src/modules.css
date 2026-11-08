@@ -15,3 +15,21 @@
  .report-detail table{min-width:0}
  .report-detail .table-wrap{overflow:visible}
 }
+
+.reminder-card{border:1px solid #d8e5e6;border-radius:12px;padding:16px;margin:12px 0;background:#fff}
+.reminder-card.completed{opacity:.72}
+.reminder-card.completed .reminder-top strong{text-decoration:line-through}
+.reminder-top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:9px}
+.reminder-meta{display:flex;gap:12px;flex-wrap:wrap;margin:9px 0;font-size:.85rem}
+.reminder-body{white-space:pre-wrap;overflow-wrap:anywhere}
+.priority-high{color:#9b3328;background:#ffebe7}
+.overdue{color:#a32423;font-weight:700}
+.reminder-fields{grid-template-columns:1fr}
+.dashboard-pending .cards{grid-template-columns:repeat(4,minmax(0,1fr));margin:16px 0}
+.dashboard-pending .stat{background:#f6faf9;margin:0}
+.dashboard-pending .stat strong{font-size:1.8rem}
+.form-group[hidden]{display:none!important}
+.custom-term-help{font-size:.8rem;margin:7px 0 0}
+.table-wrap th,.table-wrap td{vertical-align:top}
+@media(max-width:1100px){.dashboard-pending .cards{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:600px){.dashboard-pending .cards{grid-template-columns:1fr}.reminder-top{align-items:flex-start}}
