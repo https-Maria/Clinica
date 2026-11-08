@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "check": "node --check src/main.js && node --check src/modules.js && node --check src/finance.js && node --check src/operations.js && node --check src/reminders.js && node --check src/formatters.js && node --check src/dashboard.js",
+    "check": "node --check src/main.js && node --check src/modules.js && node --check src/finance.js && node --check src/operations.js && node --check src/reminders.js && node --check src/formatters.js && node --check src/dashboard.js && node --check src/google-calendar.js",
     "test": "node --test src/finance.test.js src/formatters.test.js"
   },
   "dependencies": {
