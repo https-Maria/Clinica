@@ -85,3 +85,11 @@ Os arquivos das planilhas originais não devem ser publicados no repositório p�
 ## Próximos passos
 
 Validar deploy, login e CRUD; implementar estornos auditados e testes end-to-end; conectar Google Agenda via autorização adequada; automatizar contas recorrentes; criar exportações XLSX/PDF aprimoradas e relatórios completos.
+
+## Atualização de 08/11/2026 — novos controles
+
+Foram acrescentados ao código e ao banco: máscaras e tipo de PIX, ficha de serviços expandida, lixeira administrativa de pacientes, vigência personalizada, classificação de despesas, lembretes privados, resumo de vencimentos, auditoria de alterações e entradas no aplicativo. A sessão realizada vinculada a um contrato por sessão passa a gerar a cobrança automaticamente, uma única vez.
+
+A integração com **Google Agenda** ainda exige OAuth/autorização dos calendários. Os testes no banco passaram, mas a publicação do site e os fluxos de ponta a ponta ainda devem ser confirmados.
+
+[Detalhamento das melhorias, pendências e diferenças entre serviços e contratos](docs/06-melhorias.md).
