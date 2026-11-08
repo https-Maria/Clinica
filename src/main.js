@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import './style.css';
+import { renderModule, moduleItems } from './modules.js';
 
 const app = document.querySelector('#app');
 const apiUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -78,7 +79,7 @@ function shell() {
   const heading=element('div',{class:'brand'});
   heading.append(element('strong',{},'Clínica AnaCris'),element('small',{},'Gestão administrativa'));
   const menu=element('nav',{class:'menu'});
-  for(const [key,label] of [['inicio','Início'],['patients','Pacientes'],['professionals','Profissionais'],['relatorios','Relatórios']]) {
+  for(const [key,label] of [['inicio','Início'],['patients','Pacientes'],['professionals','Profissionais'],...moduleItems]) {
     menu.append(btn(label,()=>{state.page=key;render();},'navbtn'));
   }
   sidebar.append(heading,menu);
@@ -104,12 +105,11 @@ async function refresh() {
 }
 function render() {
   const view=document.querySelector('#view');
-  if(!view) return;
-  document.querySelector('#title').textContent={
-    inicio:'Visão geral',patients:'Pacientes',professionals:'Profissionais',relatorios:'Relatórios'
-  }[state.page];
+  if(!view)return;
+  const items=[['inicio','Visão geral'],['patients','Pacientes'],['professionals','Profissionais'],...moduleItems];
+  document.querySelector('#title').textContent=items.find(x=>x[0]===state.page)?.[1]||'Clínica AnaCris';
   document.querySelectorAll('.navbtn').forEach((b,index)=>{
-    b.classList.toggle('selected',index===['inicio','patients','professionals','relatorios'].indexOf(state.page));
+    b.classList.toggle('selected',index===items.findIndex(x=>x[0]===state.page));
   });
   wipe(view);
   if(state.page==='inicio') {
@@ -120,19 +120,21 @@ function render() {
       ['Total de cadastros',state.patients.length+state.professionals.length]
     ]) {
       const card=element('div',{class:'card stat'});
-      card.append(element('span',{class:'muted'},label),element('strong',{},num));
-      cards.append(card);
+      card.append(element('span',{class:'muted'},label),element('strong',{},num));cards.append(card);
     }
     const note=element('div',{class:'card'});
-    note.append(element('h2',{},'Cadastros em primeiro lugar'),
-      element('p',{},'Registre pacientes e profissionais. Agenda, contratos, financeiro e relatórios serão adicionados posteriormente.'));
+    note.append(element('h2',{},'Bem-vinda à Clínica AnaCris'),
+      element('p',{},'Use o menu para gerenciar pacientes, profissionais, serviços, contratos, atendimentos e financeiro. Os dados ficam no Supabase.'),
+      element('p',{class:'muted'},'A sincronização automática com o Google Agenda ainda depende de configuração e autorização.'));
     view.append(cards,note);
-  } else if(state.page==='relatorios') {
-    const card=element('div',{class:'card'});
-    card.append(element('h2',{},'Exportações disponíveis'),
-      element('p',{},'No momento, exporte CSV pelas telas de Pacientes e Profissionais. O relatório semanal será implementado com os atendimentos.'));
-    view.append(card);
-  } else renderTable(view);
+  } else if(state.page==='patients'||state.page==='professionals') {
+    renderTable(view);
+  } else {
+    void renderModule(supabase,state.page,view,message).catch(error=>{
+      view.replaceChildren(element('p',{class:'notice bad'},'Não foi possível carregar o módulo.'));
+      console.error('Erro no módulo',error);
+    });
+  }
 }
 function renderTable(view) {
   const isPatient=state.page==='patients';
