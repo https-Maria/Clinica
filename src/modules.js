@@ -1,6 +1,6 @@
 import './modules.css';
 import { divideRecebimento } from './finance.js';
-import { invoiceAction, recurringExpenseAction, reverseReceiptAction, weeklyDetails, monthlyFinanceDetails } from './operations.js';
+import { invoiceAction, recurringExpenseAction, reverseReceiptAction, weeklyDetails, monthlyFinanceDetails, auditDetails } from './operations.js';
 
 const definitions = {
   services: { title: 'Serviços', singular: 'serviço', fields: [
@@ -67,7 +67,7 @@ export const moduleItems = [
   ['services','Serviços'],['contracts','Contratos'],
   ['appointments','Agenda / sessões'],['receivables','A receber'],
   ['receipts','Recebimentos'],['expenses','Despesas'],
-  ['payouts','Repasses'],['relatorios','Relatórios']
+  ['payouts','Repasses'],['relatorios','Relatórios'],['auditoria','Auditoria']
 ];
 const tables = ['patients','professionals','services','contracts','appointments','receivables','receipts','receipt_reversals','expenses','payouts'];
 function node(tag,klass='',value) {
@@ -193,6 +193,10 @@ function openForm(db,config,existing,data,reload,notify) {
   document.body.append(overlay);modal.querySelector('input,select')?.focus();
 }
 export async function renderModule(db,page,target,notify,role='staff') {
+  if(page==='auditoria'){
+    if(role!=='admin'){target.replaceChildren(node('p','notice bad','Acesso restrito a administradores.'));return;}
+    await auditDetails(db,target);return;
+  }
   target.replaceChildren(node('p','muted','Carregando os dados…'));
   const results=await Promise.all(tables.map(table=>db.from(table).select('*').order('created_at',{ascending:false}).limit(1000)));
   if(results.some(r=>r.error)){
