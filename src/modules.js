@@ -1,6 +1,7 @@
 import './modules.css';
 import { divideRecebimento } from './finance.js';
 import { renderReminders } from './reminders.js';
+import { renderGoogleCalendar } from './google-calendar.js';
 import { invoiceAction, recurringExpenseAction, reverseReceiptAction, weeklyDetails, monthlyFinanceDetails, auditDetails } from './operations.js';
 
 const definitions = {
@@ -36,7 +37,7 @@ const definitions = {
     {k:'ends_at',l:'Término',type:'datetime-local'},
     {k:'status',l:'Situação',choices:['agendado','realizado','falta','cancelado'],required:true},
     {k:'notes',l:'Observações',type:'textarea'}
-  ], cols:['starts_at','patient_id','professional_id','status'] },
+  ], cols:['starts_at','google_title','patient_id','professional_id','status'] },
   receivables: { title:'Contas a receber', singular:'cobrança', fields: [
     {k:'patient_id',l:'Paciente',ref:'patients',required:true},
     {k:'contract_id',l:'Contrato (opcional)',ref:'contracts'},
@@ -73,7 +74,7 @@ const definitions = {
 };
 export const moduleItems = [
   ['services','Serviços'],['contracts','Contratos'],
-  ['appointments','Agenda / sessões'],['receivables','A receber'],
+  ['appointments','Agenda / sessões'],['google','Google Agenda'],['receivables','A receber'],
   ['receipts','Recebimentos'],['expenses','Despesas'],
   ['payouts','Repasses'],['lembretes','Meus lembretes'],['relatorios','Relatórios'],['auditoria','Auditoria']
 ];
@@ -219,6 +220,7 @@ function openForm(db,config,existing,data,reload,notify) {
   document.body.append(overlay);modal.querySelector('input,select')?.focus();
 }
 export async function renderModule(db,page,target,notify,role='staff') {
+  if(page==='google'){await renderGoogleCalendar(db,target,notify,role);return;}
   if(page==='lembretes'){await renderReminders(db,target,notify);return;}
   if(page==='auditoria'){
     if(role!=='admin'){target.replaceChildren(node('p','notice bad','Acesso restrito a administradores.'));return;}
