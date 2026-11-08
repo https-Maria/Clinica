@@ -1,3 +1,34 @@
 <!doctype html>
-<html lang="pt-BR"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><meta name="theme-color" content="#1e4850"/><title>Clínica AnaCris | Gestão</title></head>
-<body><div id="app"></div><script type="module" src="/src/main.js"></script></body></html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1c5257">
+  <title>Clínica AnaCris | Gestão</title>
+  <style>
+    #boot{font:16px system-ui,sans-serif;max-width:540px;margin:12vh auto;padding:28px;color:#20343a;background:#f4f7f8;border:1px solid #dfe9eb;border-radius:14px}
+    #boot h1{font-size:24px}
+    body{margin:0;background:#f4f7f8}
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="boot" role="status">
+      <h1>Clínica AnaCris</h1>
+      <p>Carregando o sistema...</p>
+      <p id="boot-help" hidden>Não foi possível carregar a interface. Em GitHub → Settings → Pages, escolha <strong>GitHub Actions</strong> como origem de publicação e confira a execução em Actions.</p>
+    </div>
+  </div>
+  <script>
+    setTimeout(function () {
+      var help = document.getElementById('boot-help');
+      if (help) help.hidden = false;
+    }, 8000);
+    window.addEventListener('error', function () {
+      var help = document.getElementById('boot-help');
+      if (help) help.hidden = false;
+    });
+  </script>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
