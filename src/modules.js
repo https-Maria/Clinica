@@ -1,5 +1,6 @@
 import './modules.css';
 import { divideRecebimento } from './finance.js';
+import { invoiceAction, recurringExpenseAction, reverseReceiptAction, weeklyDetails } from './operations.js';
 
 const definitions = {
   services: { title: 'Serviços', singular: 'serviço', fields: [
@@ -43,7 +44,7 @@ const definitions = {
     {k:'received_on',l:'Data do recebimento',type:'date',required:true},
     {k:'method',l:'Forma de pagamento',choices:['pix','dinheiro','transferencia','cartao','outro'],required:true},
     {k:'notes',l:'Observações',type:'textarea'}
-  ], cols:['received_on','receivable_id','amount','method'] },
+  ], cols:['received_on','receivable_id','amount','method','receipt_state'] },
   expenses: { title:'Despesas', singular:'despesa', fields: [
     {k:'description',l:'Descrição',required:true},
     {k:'category',l:'Categoria'},
@@ -68,7 +69,7 @@ export const moduleItems = [
   ['receipts','Recebimentos'],['expenses','Despesas'],
   ['payouts','Repasses'],['relatorios','Relatórios']
 ];
-const tables = ['patients','professionals','services','contracts','appointments','receivables','receipts','expenses','payouts'];
+const tables = ['patients','professionals','services','contracts','appointments','receivables','receipts','receipt_reversals','expenses','payouts'];
 function node(tag,klass='',value) {
   const e=document.createElement(tag);
   if(klass)e.className=klass;
@@ -119,7 +120,8 @@ function labelOf(field,value,data) {
   if(refs[field])return assoc(refs[field],value,data);
   return value??'—';
 }
-function receivedFor(id,data){return data.receipts.filter(x=>x.receivable_id===id).reduce((total,x)=>total+Number(x.amount),0);}
+function isReversed(id,data){return data.receipt_reversals.some(x=>x.receipt_id===id);}
+function receivedFor(id,data){return data.receipts.filter(x=>x.receivable_id===id&&!isReversed(x.id,data)).reduce((total,x)=>total+Number(x.amount),0);}
 function statusReceivable(row,data){
   if(!row.active)return 'Inativa';
   const paid=receivedFor(row.id,data),total=Number(row.amount);
@@ -190,7 +192,7 @@ function openForm(db,config,existing,data,reload,notify) {
   overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
   document.body.append(overlay);modal.querySelector('input,select')?.focus();
 }
-export async function renderModule(db,page,target,notify) {
+export async function renderModule(db,page,target,notify,role='staff') {
   target.replaceChildren(node('p','muted','Carregando os dados…'));
   const results=await Promise.all(tables.map(table=>db.from(table).select('*').order('created_at',{ascending:false}).limit(1000)));
   if(results.some(r=>r.error)){
@@ -207,7 +209,7 @@ export async function renderModule(db,page,target,notify) {
   const search=node('input','input search');search.placeholder='Pesquisar…';search.setAttribute('aria-label','Pesquisar');
   const controls=node('div','actions');
   controls.append(button('Exportar CSV',()=>csvExport(page+'_'+new Date().toISOString().slice(0,10),config.fields.map(f=>f.k),records)));
-  controls.append(button('+ Novo '+config.singular,()=>openForm(db,config,null,data,()=>renderModule(db,page,target,notify),notify),''));
+  if(page!=='payouts'||role==='admin')controls.append(button('+ Novo '+config.singular,()=>openForm(db,config,null,data,()=>renderModule(db,page,target,notify,role),notify),''));
   tools.append(search,controls);
   const caption=node('p','muted module-caption',
     page==='appointments'?'Agenda interna. Integração automática com Google Agenda ainda não conectada.':
@@ -215,7 +217,7 @@ export async function renderModule(db,page,target,notify) {
     page==='receipts'?'Recebimentos são registros financeiros imutáveis. Correções exigem estorno controlado.':
     'Consulte, cadastre, edite e inative os registros quando aplicável.');
   const wrapper=node('div','table-wrap'),table=node('table'),thead=node('thead'),tbody=node('tbody'),thRow=node('tr');
-  const headers=config.cols.map(c=>c==='payment_status'?'Situação':config.fields.find(f=>f.k===c)?.l||c);
+  const headers=config.cols.map(c=>['payment_status','receipt_state'].includes(c)?'Situação':config.fields.find(f=>f.k===c)?.l||c);
   [...headers,'Ações'].forEach(h=>thRow.append(node('th','',h)));
   thead.append(thRow);table.append(thead,tbody);wrapper.append(table);
   panel.append(caption,tools,wrapper);target.replaceChildren(panel);
@@ -226,18 +228,21 @@ export async function renderModule(db,page,target,notify) {
     shown.forEach(row=>{
       const tr=node('tr');
       config.cols.forEach(c=>{
-        const td=node('td','',c==='payment_status'?statusReceivable(row,data):labelOf(c,row[c],data));
+        const td=node('td','',c==='payment_status'?statusReceivable(row,data):c==='receipt_state'?(isReversed(row.id,data)?'Estornado':'Válido'):labelOf(c,row[c],data));
         tr.append(td);
       });
       const commands=node('td','actions');
-      if(!config.immutable)commands.append(button('Editar',()=>openForm(db,config,row,data,()=>renderModule(db,page,target,notify),notify),'secondary small'));
-      if(!config.immutable)commands.append(button(row.active?'Inativar':'Reativar',async()=>{
+      if(!config.immutable&&(page!=='payouts'||role==='admin'))commands.append(button('Editar',()=>openForm(db,config,row,data,()=>renderModule(db,page,target,notify,role),notify),'secondary small'));
+      if(!config.immutable&&(page!=='payouts'||role==='admin'))commands.append(button(row.active?'Inativar':'Reativar',async()=>{
         if(!confirm((row.active?'Inativar':'Reativar')+' este registro?'))return;
         const {error}=await db.from(page).update({active:!row.active}).eq('id',row.id);
         if(error){notify('Não foi possível alterar: '+error.message,true);return;}
-        notify('Situação atualizada.');await renderModule(db,page,target,notify);
+        notify('Situação atualizada.');await renderModule(db,page,target,notify,role);
       },'secondary small'));
-      if(page==='receivables') commands.append(button('Receber',()=>openForm(db,definitions.receipts,null,{...data,receivables:data.receivables.filter(x=>x.id===row.id)},()=>renderModule(db,page,target,notify),notify),'secondary small'));
+      if(page==='receivables' && row.active && receivedFor(row.id,data)<Number(row.amount)) commands.append(button('Receber',()=>openForm(db,definitions.receipts,null,{...data,receivables:data.receivables.filter(x=>x.id===row.id)},()=>renderModule(db,page,target,notify,role),notify),'secondary small'));
+      if(page==='receipts'&&role==='admin'&&!isReversed(row.id,data))commands.append(button('Estornar',()=>reverseReceiptAction(db,row,()=>renderModule(db,page,target,notify,role),notify),'secondary small'));
+      if(page==='contracts'&&row.active)commands.append(button('Gerar cobrança',()=>invoiceAction(db,row,data,()=>renderModule(db,page,target,notify,role),notify),'secondary small'));
+      if(page==='expenses'&&row.active&&['mensal','anual'].includes(row.recurrence))commands.append(button('Gerar próxima',()=>recurringExpenseAction(db,row,()=>renderModule(db,page,target,notify,role),notify),'secondary small'));
       tr.append(commands);tbody.append(tr);
     });
     if(!shown.length){const tr=node('tr');const td=node('td','empty','Nenhum registro encontrado');td.colSpan=config.cols.length+1;tr.append(td);tbody.append(tr);}
@@ -261,12 +266,12 @@ function renderReports(target,data){
   }));
   const estimateByProfessional=new Map();
   let unmatchedReceipts=0;
-  for(const receipt of data.receipts){
+  for(const receipt of data.receipts.filter(x=>!isReversed(x.id,data))){
     const invoice=data.receivables.find(c=>c.id===receipt.receivable_id);
     const contract=data.contracts.find(c=>c.id===invoice?.contract_id);
     const professional=data.professionals.find(p=>p.id===contract?.professional_id);
     if(!contract||!professional){unmatchedReceipts++;continue;}
-    const pct=contract.share_pct??professional.default_share_pct??40;
+    const pct=receipt.share_pct_snapshot??contract.share_pct??professional.default_share_pct??40;
     const amount=divideRecebimento(receipt.amount,pct).profissional;
     const old=estimateByProfessional.get(professional.id)||{profissional:professional.name,valor:0,recebimentos:0};
     old.valor+=amount;old.recebimentos++;
@@ -278,7 +283,7 @@ function renderReports(target,data){
   }));
   const estimatedTotal=estimateRows.reduce((s,x)=>s+x.estimativa,0);
   const activePatients=data.patients.filter(p=>p.active);
-  const earned=data.receipts.reduce((s,x)=>s+Number(x.amount),0);
+  const earned=data.receipts.filter(x=>!isReversed(x.id,data)).reduce((s,x)=>s+Number(x.amount),0);
   const expenses=data.expenses.filter(x=>x.active&&x.paid_on).reduce((s,x)=>s+Number(x.amount),0);
   const paidPayout=data.payouts.filter(x=>x.active&&x.status==='pago').reduce((s,x)=>s+Number(x.amount),0);
   const mini=node('div','cards');
@@ -309,5 +314,7 @@ function renderReports(target,data){
   forecast.append(estimateTable,node('p','', 'Total estimado: '+fmtMoney(estimatedTotal)+'. Recebimentos sem contrato/profissional associados: '+unmatchedReceipts+'.'));
   card.append(forecast);
   const note=node('p','muted','A estimativa não substitui a conferência da presença, do contrato e da condição de liberação do repasse. Relatórios financeiros acima exibem totais históricos, não saldos mensais.');
-  card.append(note);target.replaceChildren(card);
+  card.append(note);
+  weeklyDetails(data,card);
+  target.replaceChildren(card);
 }
