@@ -212,3 +212,29 @@ export function monthlyFinanceDetails(data,container) {
   picker.addEventListener('change',update);
   update();
 }
+
+export async function auditDetails(db,target) {
+  target.replaceChildren($('p','Carregando auditoria…','muted'));
+  const {data,error}=await db.from('audit_events').select('table_name,record_id,operation,changed_columns,actor_id,happened_at')
+    .order('happened_at',{ascending:false}).limit(250);
+  if(error){target.replaceChildren($('p','Não foi possível carregar a auditoria.','notice bad'));return;}
+  const panel=$('section',undefined,'card');
+  panel.append($('h2','Histórico de alterações'));
+  panel.append($('p','Exibe até 250 alterações recentes e quais campos foram modificados, sem copiar os dados de pacientes. Somente administradores podem consultar este histórico.','muted'));
+  const wrapper=$('div',undefined,'table-wrap'),table=$('table'),head=$('tr');
+  ['Quando','Tabela','Ação','Campos alterados','Responsável'].forEach(x=>head.append($('th',x)));
+  const thead=$('thead');thead.append(head);table.append(thead);
+  const body=$('tbody');
+  for(const entry of data||[]){
+    const tr=$('tr');
+    const fields=(entry.changed_columns||[]).join(', ')||'—';
+    [
+      new Date(entry.happened_at).toLocaleString('pt-BR'),
+      entry.table_name,entry.operation==='INSERT'?'Criou':'Editou',
+      fields,entry.actor_id?String(entry.actor_id).slice(0,8)+'…':'Sistema'
+    ].forEach(v=>tr.append($('td',v)));
+    body.append(tr);
+  }
+  if(!data?.length){const tr=$('tr'),td=$('td','Nenhuma alteração registrada.');td.colSpan=5;tr.append(td);body.append(tr);}
+  table.append(body);wrapper.append(table);panel.append(wrapper);target.replaceChildren(panel);
+}
