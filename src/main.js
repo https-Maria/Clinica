@@ -13,7 +13,7 @@ const schemas = {
     ['phone','Telefone','tel'],['guardian_name','Responsável','text'],
     ['guardian_phone','Telefone do responsável','tel'],['email','E-mail','email'],
     ['address','Endereço','text'],['start_date','Data de início','date'],
-    ['end_date','Data de encerramento','date'],['notes','Observações administrativas','textarea']
+    ['end_date','Data de encerramento','date'],['end_reason','Motivo do encerramento','end_reason'],['notes','Observações administrativas','textarea']
   ],
   professionals: [
     ['name','Nome completo','text',true],['phone','Telefone','tel'],
@@ -181,8 +181,9 @@ function openForm(existing) {
   modal.append(element('h2',{},existing?'Editar cadastro':'Novo cadastro'));
   for(const [name,label,type,required] of schema) {
     const block=element('div',{class:type==='textarea'?'full':''});
-    const field=element(type==='textarea'?'textarea':'input',{id:'field_'+name,name,class:'input'});
-    if(type!=='textarea')field.type=type;
+    const field=element(type==='textarea'?'textarea':type==='end_reason'?'select':'input',{id:'field_'+name,name,class:'input'});
+    if(type==='end_reason')for(const [value,text] of [['','Não informado'],['alta','Alta'],['interrupcao','Interrompeu tratamento'],['outro','Outro']])field.append(new Option(text,value));
+    if(type!=='textarea'&&type!=='end_reason')field.type=type;
     if(type==='number'){field.min='0';field.max='100';field.step='0.01';}
     if(required)field.required=true;
     field.value=existing?.[name]??(name==='default_share_pct'?'40':'');
