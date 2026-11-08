@@ -93,3 +93,9 @@ Foram acrescentados ao código e ao banco: máscaras e tipo de PIX, ficha de ser
 A integração com **Google Agenda** ainda exige OAuth/autorização dos calendários. Os testes no banco passaram, mas a publicação do site e os fluxos de ponta a ponta ainda devem ser confirmados.
 
 [Detalhamento das melhorias, pendências e diferenças entre serviços e contratos](docs/06-melhorias.md).
+
+## Google Agenda (integração preparada)
+
+Foi adicionado o módulo **Google Agenda** com fluxo OAuth de leitura, mapeamento de calendários por profissional e importação de eventos selecionados. A configuração do Client ID e a autorização da conta Google são obrigatórias antes de usar. **Ainda não é uma sincronização automática ou bidirecional.**
+
+[Passo a passo do OAuth no Google Cloud e funcionamento da integração](docs/07-integracao-google-agenda.md).
