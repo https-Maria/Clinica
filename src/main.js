@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import './style.css';
 import { renderModule, moduleItems } from './modules.js';
+import { maskPhone, maskPix, normalizePix, isValidPix } from './formatters.js';
 
 const app = document.querySelector('#app');
 const apiUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -19,7 +20,8 @@ const schemas = {
     ['name','Nome completo','text',true],['phone','Telefone','tel'],
     ['email','E-mail','email'],['council_type','Conselho (CRM, CREFITO, etc.)','text'],
     ['council_number','Número do conselho','text'],['council_state','UF','text'],
-    ['specialty','Especialidade','text'],['pix_key','Chave PIX','text'],
+    ['specialty','Especialidade','text'],['pix_key_type','Tipo da chave PIX','pix_type'],
+    ['pix_key','Chave PIX','text'],
     ['default_share_pct','Percentual de repasse (%)','number',true],
     ['notes','Observações administrativas','textarea']
   ]
@@ -115,9 +117,9 @@ function render() {
   if(state.page==='inicio') {
     const cards=element('div',{class:'cards'});
     for(const [label,num] of [
-      ['Pacientes ativos',state.patients.filter(x=>x.active).length],
+      ['Pacientes ativos',state.patients.filter(x=>x.active&&!x.deleted_at).length],
       ['Profissionais ativos',state.professionals.filter(x=>x.active).length],
-      ['Total de cadastros',state.patients.length+state.professionals.length]
+      ['Total de cadastros',state.patients.filter(x=>!x.deleted_at).length+state.professionals.length]
     ]) {
       const card=element('div',{class:'card stat'});
       card.append(element('span',{class:'muted'},label),element('strong',{},num));cards.append(card);
@@ -143,9 +145,17 @@ function renderTable(view) {
   const bar=element('div',{class:'toolbar'});
   const search=element('input',{class:'input search',placeholder:'Buscar pelo nome…','aria-label':'Buscar pelo nome'});
   const actions=element('div',{class:'actions'});
-  actions.append(btn('Exportar CSV',()=>exportCsv(data,isPatient),'secondary'),
+  actions.append(btn('Exportar CSV',()=>exportCsv(data.filter(x=>!isPatient||!x.deleted_at),isPatient),'secondary'),
     btn(isPatient?'+ Novo paciente':'+ Novo profissional',()=>openForm(null)));
   bar.append(search,actions);
+  let showDeleted=false;
+  if(isPatient&&state.role==='admin'){
+    const label=element('label',{class:'checkbox-label'});
+    const checkbox=element('input',{type:'checkbox','aria-label':'Mostrar pacientes excluídos'});
+    checkbox.addEventListener('change',()=>{showDeleted=checkbox.checked;draw();});
+    label.append(checkbox,document.createTextNode(' Mostrar excluídos'));
+    bar.append(label);
+  }
   const wrap=element('div',{class:'table-wrap'});
   const table=element('table');
   const tr=element('tr');
@@ -154,13 +164,21 @@ function renderTable(view) {
   const body=element('tbody'); table.append(head,body);wrap.append(table);panel.append(bar,wrap);view.append(panel);
   function draw() {
     wipe(body);
-    const matches=data.filter(row=>row.name.toLocaleLowerCase('pt-BR').includes(search.value.trim().toLocaleLowerCase('pt-BR')));
+    const matches=data.filter(row=>{
+      if(isPatient&&Boolean(row.deleted_at)!==showDeleted)return false;
+      return row.name.toLocaleLowerCase('pt-BR').includes(search.value.trim().toLocaleLowerCase('pt-BR'));
+    });
     for(const row of matches) {
       const line=element('tr');
-      const status=element('td');status.append(element('span',{class:row.active?'pill':'pill inactive'},row.active?'Ativo':'Inativo'));
+      const status=element('td');status.append(element('span',{class:row.deleted_at?'pill inactive':row.active?'pill':'pill inactive'},row.deleted_at?'Excluído':row.active?'Ativo':'Inativo'));
       const controls=element('td',{class:'actions'});
-      controls.append(btn('Editar',()=>openForm(row),'secondary small'),
-        btn(row.active?'Inativar':'Reativar',()=>changeStatus(row),'secondary small'));
+      if(isPatient&&row.deleted_at){
+        if(state.role==='admin')controls.append(btn('Restaurar',()=>restorePatient(row),'secondary small'));
+      }else{
+        controls.append(btn('Editar',()=>openForm(row),'secondary small'),
+          btn(row.active?'Inativar':'Reativar',()=>changeStatus(row),'secondary small'));
+        if(isPatient&&state.role==='admin')controls.append(btn('Excluir',()=>deletePatient(row),'danger small'));
+      }
       line.append(element('td',{},row.name),
         element('td',{},isPatient?row.phone||'—':[row.council_type,row.council_number].filter(Boolean).join(' ')||'—'),
         status,controls);body.append(line);
@@ -181,13 +199,32 @@ function openForm(existing) {
   modal.append(element('h2',{},existing?'Editar cadastro':'Novo cadastro'));
   for(const [name,label,type,required] of schema) {
     const block=element('div',{class:type==='textarea'?'full':''});
-    const field=element(type==='textarea'?'textarea':type==='end_reason'?'select':'input',{id:'field_'+name,name,class:'input'});
+    const field=element(type==='textarea'?'textarea':['end_reason','pix_type'].includes(type)?'select':'input',{id:'field_'+name,name,class:'input'});
     if(type==='end_reason')for(const [value,text] of [['','Não informado'],['alta','Alta'],['interrupcao','Interrompeu tratamento'],['outro','Outro']])field.append(new Option(text,value));
-    if(type!=='textarea'&&type!=='end_reason')field.type=type;
+    if(type==='pix_type')for(const [value,text] of [['','Selecione o tipo'],['cpf','CPF'],['cnpj','CNPJ'],['celular','Celular'],['email','E-mail'],['aleatoria','Chave aleatória']])field.append(new Option(text,value));
+    if(type!=='textarea'&&type!=='end_reason'&&type!=='pix_type')field.type=type;
     if(type==='number'){field.min='0';field.max='100';field.step='0.01';}
     if(required)field.required=true;
     field.value=existing?.[name]??(name==='default_share_pct'?'40':'');
+    if(['phone','guardian_phone'].includes(name)){
+      field.value=maskPhone(field.value);
+      field.addEventListener('input',()=>{field.value=maskPhone(field.value);});
+      field.placeholder='(11) 99999-9999';
+    }
     block.append(element('label',{for:'field_'+name},label),field);grid.append(block);
+  }
+  if(currentTable==='professionals'){
+    const type=form.querySelector('[name="pix_key_type"]')||grid.querySelector('[name="pix_key_type"]');
+    const pix=grid.querySelector('[name="pix_key"]');
+    const updateMask=()=>{
+      if(!type||!pix)return;
+      pix.type=type.value==='email'?'email':'text';
+      pix.placeholder=({cpf:'000.000.000-00',cnpj:'00.000.000/0000-00',celular:'+55 (11) 99999-9999',email:'exemplo@dominio.com',aleatoria:'00000000-0000-0000-0000-000000000000'})[type.value]||'Selecione um tipo acima';
+      if(pix.value)pix.value=maskPix(pix.value,type.value);
+    };
+    type?.addEventListener('change',()=>{if(pix)pix.value='';updateMask();});
+    pix?.addEventListener('input',()=>{pix.value=maskPix(pix.value,type?.value);});
+    updateMask();
   }
   const actions=element('div',{class:'actions modal-actions'});
   const save=element('button',{class:'btn',type:'submit'},'Salvar');
@@ -201,6 +238,14 @@ function openForm(existing) {
       const raw=form.elements.namedItem(name).value.trim();
       values[name]=raw===''&&!required?null:type==='number'?Number(raw):raw;
     }
+    if(currentTable==='professionals'){
+      if(values.pix_key||values.pix_key_type){
+        if(!values.pix_key_type||!isValidPix(values.pix_key,values.pix_key_type)){
+          save.disabled=false;alert('Informe uma chave PIX compatível com o tipo escolhido. Confira o formato.');return;
+        }
+        values.pix_key=normalizePix(values.pix_key,values.pix_key_type);
+      }else{values.pix_key=null;values.pix_key_type=null;}
+    }
     const action=existing?supabase.from(currentTable).update(values).eq('id',existing.id):supabase.from(currentTable).insert(values);
     const {error}=await action;
     save.disabled=false;
@@ -212,6 +257,23 @@ function openForm(existing) {
   overlay.addEventListener('click',event=>{if(event.target===overlay)overlay.remove();});
   document.body.append(overlay);modal.querySelector('input')?.focus();
 }
+async function deletePatient(row){
+  if(state.role!=='admin')return;
+  if(!window.confirm('Excluir o paciente "'+row.name+'"? O cadastro sairá das listas, mas será preservado para auditoria e vínculos.'))return;
+  const confirmation=window.prompt('Digite EXCLUIR para confirmar a exclusão de '+row.name+':');
+  if(confirmation!=='EXCLUIR')return;
+  const {error}=await supabase.from('patients')
+    .update({deleted_at:new Date().toISOString(),active:false}).eq('id',row.id);
+  if(error){message('Não foi possível excluir: '+error.message,true);return;}
+  await refresh();message('Paciente movido para a lista de excluídos.');
+}
+async function restorePatient(row){
+  if(state.role!=='admin'||!confirm('Restaurar '+row.name+'?'))return;
+  const {error}=await supabase.from('patients')
+    .update({deleted_at:null,deleted_by:null,active:false}).eq('id',row.id);
+  if(error){message('Não foi possível restaurar: '+error.message,true);return;}
+  await refresh();message('Paciente restaurado como inativo. Você pode reativá-lo.');
+}
 async function changeStatus(row) {
   if(!window.confirm((row.active?'Inativar ':'Reativar ')+row.name+'? O registro não será apagado.'))return;
   const {error}=await supabase.from(state.page).update({active:!row.active}).eq('id',row.id);
@@ -220,8 +282,8 @@ async function changeStatus(row) {
 }
 function exportCsv(rows,isPatient) {
   const cols=isPatient?
-    ['name','birth_date','phone','guardian_name','guardian_phone','email','address','start_date','end_date','notes','active']:
-    ['name','phone','email','council_type','council_number','council_state','specialty','pix_key','default_share_pct','notes','active'];
+    ['name','birth_date','phone','guardian_name','guardian_phone','email','address','start_date','end_date','end_reason','notes','active']:
+    ['name','phone','email','council_type','council_number','council_state','specialty','pix_key_type','pix_key','default_share_pct','notes','active'];
   const csvCell=value=>{
     const text=String(value??'').replace(/^[=+\-@\t\r]/,"'$&").replaceAll('"','""');
     return '"'+text+'"';
@@ -249,7 +311,11 @@ async function init() {
   }
   const {data}=await supabase.auth.getUser();
   state.user=data?.user??null;
-  supabase.auth.onAuthStateChange((_,session)=>{
+  supabase.auth.onAuthStateChange((event,session)=>{
+    if(event==='SIGNED_IN'&&session?.user?.id){
+      // Registro operacional; os logs oficiais de autenticação ficam no Supabase Auth.
+      setTimeout(()=>{void supabase.from('app_login_events').insert({user_id:session.user.id});},0);
+    }
     const newUser=session?.user??null;
     if(newUser?.id!==state.user?.id){state.user=newUser;setTimeout(()=>{void route();},0);}
   });
