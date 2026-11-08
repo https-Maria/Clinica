@@ -1,0 +1,10 @@
+-- A migração `campos_pix_servicos_lixeira_lembretes_logins_e_presenca` foi aplicada no Supabase.
+-- Este documento é um registro resumido do que foi criado; a migração original completa está no histórico do Supabase.
+-- Estruturas adicionadas:
+-- professionals.pix_key_type; services.description,specialty,duration_minutes,delivery_mode,reference_price,notes;
+-- expenses.expense_type; contracts.custom_term_requires_end_date;
+-- patients.deleted_at,deleted_by; personal_reminders, app_login_events;
+-- triggers patients_deletion_guard, attendance_billable_insert, attendance_billable_update,
+-- appointments_billing_guard, reminders_metadata, reminders_audit;
+-- API de dados resguardada por RLS para lembretes pessoais e registros de login.
+-- ATENÇÃO: este arquivo não é executável isoladamente; use o histórico de migrações do Supabase.
