@@ -54,14 +54,14 @@ const definitions = {
   ], cols:['received_on','receivable_id','amount','method','receipt_state'] },
   expenses: { title:'Despesas', singular:'despesa', fields: [
     {k:'description',l:'Descrição',required:true},
-    {k:'expense_type',l:'Tipo de despesa',choices:['fixa','variavel','sazonal'],required:true},
-    {k:'category',l:'Categoria (ex.: aluguel, energia, manutenção)'},
+    {k:'expense_type',l:'Classificação',choices:['fixa','variavel','sazonal'],required:true},
+    {k:'category',l:'Detalhamento (ex.: aluguel, energia, manutenção)'},
     {k:'amount',l:'Valor (R$)',type:'number',step:'0.01',required:true},
     {k:'due_on',l:'Vencimento',type:'date',required:true},
     {k:'paid_on',l:'Data do pagamento',type:'date'},
     {k:'recurrence',l:'Recorrência',choices:['unica','mensal','anual'],required:true},
     {k:'notes',l:'Observações',type:'textarea'}
-  ], cols:['description','amount','due_on','paid_on'] },
+  ], cols:['description','expense_type','category','amount','due_on','paid_on'] },
   payouts: { title:'Repasses profissionais', singular:'repasse', fields: [
     {k:'professional_id',l:'Profissional',ref:'professionals',required:true},
     {k:'reference_on',l:'Data de referência',type:'date',required:true},
@@ -122,7 +122,7 @@ function assoc(type,id,data) {
 }
 function labelOf(field,value,data) {
   if(field==='payment_status')return statusReceivable(value,data);
-  if(['amount','default_share_pct'].includes(field))return field==='amount'?fmtMoney(value):(value===null?'Padrão':String(value)+'%');
+  if(['amount','reference_price','default_share_pct'].includes(field))return field==='default_share_pct'?(value===null?'Padrão':String(value)+'%'):fmtMoney(value);
   if(['starts_on','ends_on','due_on','received_on','paid_on','reference_on','starts_at','ends_at'].includes(field))return fmtDate(value);
   const refs={patient_id:'patients',professional_id:'professionals',service_id:'services',contract_id:'contracts',receivable_id:'receivables'};
   if(refs[field])return assoc(refs[field],value,data);
