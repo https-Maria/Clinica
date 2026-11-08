@@ -6,7 +6,7 @@ const app = document.querySelector('#app');
 const apiUrl = import.meta.env.VITE_SUPABASE_URL;
 const apiKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 const supabase = apiUrl && apiKey && !apiKey.includes('COLOQUE_') ? createClient(apiUrl, apiKey) : null;
-const state = { user: null, authorized: false, page: 'inicio', patients: [], professionals: [] };
+const state = { user: null, authorized: false, role: 'staff', page: 'inicio', patients: [], professionals: [] };
 const schemas = {
   patients: [
     ['name','Nome completo','text',true],['birth_date','Nascimento','date'],
@@ -130,7 +130,7 @@ function render() {
   } else if(state.page==='patients'||state.page==='professionals') {
     renderTable(view);
   } else {
-    void renderModule(supabase,state.page,view,message).catch(error=>{
+    void renderModule(supabase,state.page,view,message,state.role).catch(error=>{
       view.replaceChildren(element('p',{class:'notice bad'},'Não foi possível carregar o módulo.'));
       console.error('Erro no módulo',error);
     });
@@ -233,8 +233,9 @@ function exportCsv(rows,isPatient) {
 }
 async function route() {
   if(!state.user){state.authorized=false;loginScreen();return;}
-  const {data,error}=await supabase.from('clinic_members').select('user_id,active').eq('user_id',state.user.id).maybeSingle();
+  const {data,error}=await supabase.from('clinic_members').select('user_id,active,role').eq('user_id',state.user.id).maybeSingle();
   state.authorized=!error&&data?.active===true;
+  state.role=data?.role||'staff';
   if(!state.authorized){noAccess();return;}
   shell();await refresh();
 }
