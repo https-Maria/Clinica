@@ -158,3 +158,57 @@ export function weeklyDetails(data,container) {
   }
   week.addEventListener('change',show);show();
 }
+
+export function monthlyFinanceDetails(data,container) {
+  const section=$('section',undefined,'report-detail');
+  section.append($('h2','Fechamento financeiro por mês'));
+  section.append($('p','Totais do mês com base nas datas registradas de recebimento, pagamento das despesas e repasses.','muted'));
+  const label=$('label','Mês de referência','report-label');
+  const picker=$('input',undefined,'input report-date');picker.type='month';
+  const now=new Date();
+  picker.value=[now.getFullYear(),String(now.getMonth()+1).padStart(2,'0')].join('-');
+  const cards=$('div',undefined,'cards');const breakdown=$('div',undefined,'table-wrap');
+  section.append(label,picker,cards,$('h3','Despesas pagas no mês'),breakdown);
+  container.append(section);
+  const money=value=>Number(value).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+  function update(){
+    const month=picker.value;if(!month)return;
+    const reversed=new Set(data.receipt_reversals.map(x=>x.receipt_id));
+    const received=data.receipts.filter(x=>x.received_on?.startsWith(month)&&!reversed.has(x.id));
+    const paidExpenses=data.expenses.filter(x=>x.active&&x.paid_on?.startsWith(month));
+    const paidPayouts=data.payouts.filter(x=>x.active&&x.status==='pago'&&x.paid_on?.startsWith(month));
+    const billed=data.receivables.filter(x=>x.active&&x.due_on?.startsWith(month));
+    const sum=(rows)=>rows.reduce((v,row)=>v+Number(row.amount),0);
+    const inTotal=sum(received),outTotal=sum(paidExpenses),payoutTotal=sum(paidPayouts);
+    const open=billed.reduce((total,item)=>{
+      const valid=data.receipts.filter(r=>r.receivable_id===item.id&&!reversed.has(r.id));
+      return total+Math.max(0,Number(item.amount)-sum(valid));
+    },0);
+    cards.replaceChildren();
+    for(const [label,value] of [
+      ['Recebimentos',money(inTotal)],['Despesas pagas',money(outTotal)],
+      ['Repasses pagos',money(payoutTotal)],['A receber (vencimento no mês)',money(open)],
+      ['Saldo de caixa registrado',money(inTotal-outTotal-payoutTotal)]
+    ]) {
+      const card=$('div',undefined,'card stat');
+      card.append($('span',label,'muted'),$('strong',value));
+      cards.append(card);
+    }
+    const table=$('table'),head=$('tr');
+    ['Descrição','Vencimento','Pagamento','Valor'].forEach(x=>head.append($('th',x)));
+    const thead=$('thead');thead.append(head);table.append(thead);
+    const body=$('tbody');
+    paidExpenses.forEach(e=>{
+      const row=$('tr');
+      [e.description,e.due_on,e.paid_on,money(e.amount)].forEach(v=>row.append($('td',v||'—')));
+      body.append(row);
+    });
+    if(!paidExpenses.length){
+      const row=$('tr'),cell=$('td','Nenhuma despesa paga neste período.');
+      cell.colSpan=4;row.append(cell);body.append(row);
+    }
+    table.append(body);breakdown.replaceChildren(table);
+  }
+  picker.addEventListener('change',update);
+  update();
+}
