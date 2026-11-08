@@ -23,6 +23,7 @@ jobs:
           node-version: '22'
       - run: npm install --no-audit --no-fund
       - run: npm run check
+      - run: npm test
       - run: npm run build
         env:
           VITE_SUPABASE_URL: https://iuchcggvcbtakeeyujwb.supabase.co
