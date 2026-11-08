@@ -236,5 +236,28 @@ export async function auditDetails(db,target) {
     body.append(tr);
   }
   if(!data?.length){const tr=$('tr'),td=$('td','Nenhuma alteração registrada.');td.colSpan=5;tr.append(td);body.append(tr);}
-  table.append(body);wrapper.append(table);panel.append(wrapper);target.replaceChildren(panel);
+  table.append(body);wrapper.append(table);panel.append(wrapper);
+  const logTitle=$('h2','Entradas no aplicativo');
+  panel.append(logTitle,$('p','Registros operacionais gerados pelo navegador quando o Supabase confirma login. Não substituem os logs oficiais de autenticação do Supabase.','muted'));
+  const {data:logins,error:loginError}=await db.from('app_login_events')
+    .select('user_id,logged_at,event_type').order('logged_at',{ascending:false}).limit(150);
+  if(loginError){panel.append($('p','Não foi possível consultar entradas no aplicativo.','notice bad'));}
+  else{
+    const loginWrap=$('div',undefined,'table-wrap'),loginTable=$('table');
+    const row=$('tr');
+    ['Data/hora','Conta (ID)','Evento'].forEach(x=>row.append($('th',x)));
+    const head=$('thead');head.append(row);loginTable.append(head);
+    const body=$('tbody');
+    (logins||[]).forEach(item=>{
+      const tr=$('tr');
+      [new Date(item.logged_at).toLocaleString('pt-BR'),item.user_id,'Entrada'].forEach(v=>tr.append($('td',v)));
+      body.append(tr);
+    });
+    if(!logins?.length){
+      const tr=$('tr'),td=$('td','Nenhuma entrada registrada pelo aplicativo.');
+      td.colSpan=3;tr.append(td);body.append(tr);
+    }
+    loginTable.append(body);loginWrap.append(loginTable);panel.append(loginWrap);
+  }
+  target.replaceChildren(panel);
 }
