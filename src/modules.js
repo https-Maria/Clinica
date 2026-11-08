@@ -1,4 +1,5 @@
 import './modules.css';
+import { divideRecebimento } from './finance.js';
 
 const definitions = {
   services: { title: 'Serviços', singular: 'serviço', fields: [
@@ -266,7 +267,7 @@ function renderReports(target,data){
     const professional=data.professionals.find(p=>p.id===contract?.professional_id);
     if(!contract||!professional){unmatchedReceipts++;continue;}
     const pct=contract.share_pct??professional.default_share_pct??40;
-    const amount=Number(receipt.amount)*Number(pct)/100;
+    const amount=divideRecebimento(receipt.amount,pct).profissional;
     const old=estimateByProfessional.get(professional.id)||{profissional:professional.name,valor:0,recebimentos:0};
     old.valor+=amount;old.recebimentos++;
     estimateByProfessional.set(professional.id,old);
